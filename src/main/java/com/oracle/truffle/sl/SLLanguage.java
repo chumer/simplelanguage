@@ -24,14 +24,19 @@ package com.oracle.truffle.sl;
 
 import java.io.*;
 import java.math.*;
+import java.net.*;
+import java.util.*;
 import java.util.Scanner;
 
 import com.oracle.truffle.api.*;
+import com.oracle.truffle.api.debug.*;
 import com.oracle.truffle.api.dsl.*;
+import com.oracle.truffle.api.frame.*;
 import com.oracle.truffle.api.instrument.*;
 import com.oracle.truffle.api.nodes.*;
 import com.oracle.truffle.api.source.*;
-import com.oracle.truffle.api.tools.*;
+import com.oracle.truffle.api.vm.*;
+import com.oracle.truffle.api.vm.TruffleVM.Symbol;
 import com.oracle.truffle.sl.builtins.*;
 import com.oracle.truffle.sl.factory.*;
 import com.oracle.truffle.sl.nodes.*;
@@ -42,6 +47,7 @@ import com.oracle.truffle.sl.nodes.instrument.*;
 import com.oracle.truffle.sl.nodes.local.*;
 import com.oracle.truffle.sl.parser.*;
 import com.oracle.truffle.sl.runtime.*;
+import com.oracle.truffle.tools.*;
 
 /**
  * SL is a simple language to demonstrate and showcase features of Truffle. The implementation is as
@@ -129,75 +135,101 @@ import com.oracle.truffle.sl.runtime.*;
  * <em>default printer</em>.
  *
  */
-public class SLMain {
+@TruffleLanguage.Registration(name = "SL", version = "0.5", mimeType = "application/x-sl")
+public class SLLanguage extends TruffleLanguage {
+    private static SLLanguage LAST;
+    private static List<NodeFactory<? extends SLBuiltinNode>> builtins = Collections.emptyList();
+    private static Visualizer visualizer = new SLDefaultVisualizer();
+    private static ASTProber registeredASTProber; // non-null if prober already registered
+    private final SLContext context;
+    private DebugSupportProvider debugSupport;
 
-    /* Demonstrate per-type tabulation of node execution counts */
+    public SLLanguage(Env env) {
+        super(env);
+        context = SLContextFactory.create(new BufferedReader(env().stdIn()), new PrintWriter(env().stdOut(), true));
+        LAST = this;
+        for (NodeFactory<? extends SLBuiltinNode> builtin : builtins) {
+            context.installBuiltin(builtin);
+        }
+    }
+
+    // TODO (mlvdv) command line options
+    /* Enables demonstration of per-type tabulation of node execution counts */
     private static boolean nodeExecCounts = false;
-    /* Demonstrate per-line tabulation of STATEMENT node execution counts */
+    /* Enables demonstration of per-line tabulation of STATEMENT node execution counts */
     private static boolean statementCounts = false;
-    /* Demonstrate per-line tabulation of STATEMENT coverage */
+    /* Enables demonstration of per-line tabulation of STATEMENT coverage */
     private static boolean coverage = false;
+
+    /* Small tools that can be installed for demonstration */
+    private static NodeExecCounter nodeExecCounter = null;
+    private static NodeExecCounter statementExecCounter = null;
+    private static CoverageTracker coverageTracker = null;
 
     /**
      * The main entry point. Use the mx command "mx sl" to run it with the correct class path setup.
      */
     public static void main(String[] args) throws IOException {
+        TruffleVM vm = TruffleVM.newVM().build();
+        assert vm.getLanguages().containsKey("application/x-sl");
 
-        SLContext context = SLContextFactory.create(new BufferedReader(new InputStreamReader(System.in)), System.out);
-
-        Source source;
-        if (args.length == 0) {
-            source = Source.fromReader(new InputStreamReader(System.in), "stdin");
-        } else {
-            source = Source.fromFileName(args[0]);
-        }
+        setupToolDemos();
 
         int repeats = 1;
         if (args.length >= 2) {
             repeats = Integer.parseInt(args[1]);
         }
 
-        run(context, source, System.out, repeats);
+        if (args.length == 0) {
+            vm.eval("application/x-sl", new InputStreamReader(System.in));
+        } else {
+            vm.eval(new File(args[0]).toURI());
+        }
+        Symbol main = vm.findGlobalSymbol("main");
+        if (main == null) {
+            throw new SLException("No function main() defined in SL source file.");
+        }
+        while (repeats-- > 0) {
+            main.invoke(null);
+        }
+        reportToolDemos();
+    }
+
+    /**
+     * Temporary method during API evolution, supports debugger integration.
+     */
+    public static void run(Source source) throws IOException {
+        TruffleVM vm = TruffleVM.newVM().build();
+        assert vm.getLanguages().containsKey("application/x-sl");
+        vm.eval(new File(source.getPath()).toURI());
+        Symbol main = vm.findGlobalSymbol("main");
+        if (main == null) {
+            throw new SLException("No function main() defined in SL source file.");
+        }
+        main.invoke(null);
     }
 
     /**
      * Parse and run the specified SL source. Factored out in a separate method so that it can also
      * be used by the unit test harness.
      */
-    public static long run(SLContext context, Source source, PrintStream logOutput, int repeats) {
+    public static long run(TruffleVM context, URI source, PrintWriter logOutput, PrintWriter out, int repeats, List<NodeFactory<? extends SLBuiltinNode>> currentBuiltins) throws IOException {
+        builtins = currentBuiltins;
+
         if (logOutput != null) {
             logOutput.println("== running on " + Truffle.getRuntime().getName());
             // logOutput.println("Source = " + source.getCode());
         }
 
-        if (statementCounts || coverage) {
-            Probe.registerASTProber(new SLStandardASTProber());
-        }
-
-        NodeExecCounter nodeExecCounter = null;
-        if (nodeExecCounts) {
-            nodeExecCounter = new NodeExecCounter();
-            nodeExecCounter.install();
-        }
-
-        NodeExecCounter statementExecCounter = null;
-        if (statementCounts) {
-            statementExecCounter = new NodeExecCounter(StandardSyntaxTag.STATEMENT);
-            statementExecCounter.install();
-        }
-
-        CoverageTracker coverageTracker = null;
-        if (coverage) {
-            coverageTracker = new CoverageTracker();
-            coverageTracker.install();
-        }
-
         /* Parse the SL source file. */
-        Parser.parseSL(context, source);
+        Object result = context.eval(source);
+        if (result != null) {
+            out.println(result);
+        }
 
         /* Lookup our main entry point, which is per definition always named "main". */
-        SLFunction main = context.getFunctionRegistry().lookup("main");
-        if (main.getCallTarget() == null) {
+        Symbol main = context.findGlobalSymbol("main");
+        if (main == null) {
             throw new SLException("No function main() defined in SL source file.");
         }
 
@@ -208,19 +240,21 @@ public class SLMain {
         /* Change to dump the AST to IGV over the network. */
         boolean dumpASTToIGV = false;
 
-        printScript("before execution", context, logOutput, printASTToLog, printSourceAttributionToLog, dumpASTToIGV);
+        printScript("before execution", LAST.context, logOutput, printASTToLog, printSourceAttributionToLog, dumpASTToIGV);
         long totalRuntime = 0;
         try {
             for (int i = 0; i < repeats; i++) {
                 long start = System.nanoTime();
                 /* Call the main entry point, without any arguments. */
                 try {
-                    Object result = main.getCallTarget().call();
-                    if (result != SLNull.SINGLETON) {
-                        context.getOutput().println(result);
+                    result = main.invoke(null);
+                    if (result != null) {
+                        out.println(result);
                     }
                 } catch (UnsupportedSpecializationException ex) {
-                    context.getOutput().println(formatTypeError(ex));
+                    out.println(formatTypeError(ex));
+                } catch (SLUndefinedFunctionException ex) {
+                    out.println(String.format("Undefined function: %s", ex.getFunctionName()));
                 }
                 long end = System.nanoTime();
                 totalRuntime += end - start;
@@ -231,19 +265,7 @@ public class SLMain {
             }
 
         } finally {
-            printScript("after execution", context, logOutput, printASTToLog, printSourceAttributionToLog, dumpASTToIGV);
-        }
-        if (nodeExecCounter != null) {
-            nodeExecCounter.print(System.out);
-            nodeExecCounter.dispose();
-        }
-        if (statementExecCounter != null) {
-            statementExecCounter.print(System.out);
-            statementExecCounter.dispose();
-        }
-        if (coverageTracker != null) {
-            coverageTracker.print(System.out);
-            coverageTracker.dispose();
+            printScript("after execution", LAST.context, logOutput, printASTToLog, printSourceAttributionToLog, dumpASTToIGV);
         }
         return totalRuntime;
     }
@@ -254,7 +276,7 @@ public class SLMain {
      * <p>
      * When printASTToLog is true: prints the ASTs to the console.
      */
-    private static void printScript(String groupName, SLContext context, PrintStream logOutput, boolean printASTToLog, boolean printSourceAttributionToLog, boolean dumpASTToIGV) {
+    private static void printScript(String groupName, SLContext context, PrintWriter logOutput, boolean printASTToLog, boolean printSourceAttributionToLog, boolean dumpASTToIGV) {
         if (dumpASTToIGV) {
             GraphPrintVisitor graphPrinter = new GraphPrintVisitor();
             graphPrinter.beginGroup(groupName);
@@ -299,8 +321,8 @@ public class SLMain {
         result.append("Type error");
         if (ex.getNode() != null && ex.getNode().getSourceSection() != null) {
             SourceSection ss = ex.getNode().getSourceSection();
-            if (ss != null && !(ss instanceof NullSourceSection)) {
-                result.append(" at ").append(ss.getSource().getName()).append(" line ").append(ss.getStartLine()).append(" col ").append(ss.getStartColumn());
+            if (ss != null && ss.getSource() != null) {
+                result.append(" at ").append(ss.getSource().getShortName()).append(" line ").append(ss.getStartLine()).append(" col ").append(ss.getStartColumn());
             }
         }
         result.append(": operation");
@@ -339,6 +361,135 @@ public class SLMain {
             }
         }
         return result.toString();
+    }
+
+    @Override
+    protected Object eval(Source code) throws IOException {
+        try {
+            context.evalSource(code);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+        return null;
+    }
+
+    @Override
+    protected Object findExportedSymbol(String globalName, boolean onlyExplicit) {
+        for (SLFunction f : context.getFunctionRegistry().getFunctions()) {
+            if (globalName.equals(f.getName())) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    protected Object getLanguageGlobal() {
+        return context;
+    }
+
+    @Override
+    protected boolean isObjectOfLanguage(Object object) {
+        return object instanceof SLFunction;
+    }
+
+    @Override
+    protected ToolSupportProvider getToolSupport() {
+        return getDebugSupport();
+    }
+
+    @Override
+    protected DebugSupportProvider getDebugSupport() {
+        if (debugSupport == null) {
+            debugSupport = new SLDebugProvider();
+        }
+        return debugSupport;
+    }
+
+    // TODO (mlvdv) remove the static hack when we no longer have the static demo variables
+    private static void setupToolDemos() {
+        if (statementCounts || coverage) {
+            if (registeredASTProber == null) {
+                final ASTProber newProber = new SLStandardASTProber();
+                // This should be registered on the TruffleVM
+                Probe.registerASTProber(newProber);
+                registeredASTProber = newProber;
+            }
+        }
+        if (nodeExecCounts) {
+            nodeExecCounter = new NodeExecCounter();
+            nodeExecCounter.install();
+        }
+
+        if (statementCounts) {
+            statementExecCounter = new NodeExecCounter(StandardSyntaxTag.STATEMENT);
+            statementExecCounter.install();
+        }
+
+        if (coverage) {
+            coverageTracker = new CoverageTracker();
+            coverageTracker.install();
+        }
+    }
+
+    private static void reportToolDemos() {
+        if (nodeExecCounter != null) {
+            nodeExecCounter.print(System.out);
+            nodeExecCounter.dispose();
+        }
+        if (statementExecCounter != null) {
+            statementExecCounter.print(System.out);
+            statementExecCounter.dispose();
+        }
+        if (coverageTracker != null) {
+            coverageTracker.print(System.out);
+            coverageTracker.dispose();
+        }
+    }
+
+    private final class SLDebugProvider implements DebugSupportProvider {
+
+        public SLDebugProvider() {
+            if (registeredASTProber == null) {
+                registeredASTProber = new SLStandardASTProber();
+                // This should be registered on the TruffleVM
+                Probe.registerASTProber(registeredASTProber);
+            }
+        }
+
+        public Visualizer getVisualizer() {
+            if (visualizer == null) {
+                visualizer = new SLDefaultVisualizer();
+            }
+            return visualizer;
+        }
+
+        public void enableASTProbing(ASTProber prober) {
+            if (prober != null) {
+                // This should be registered on the TruffleVM
+                Probe.registerASTProber(prober);
+            }
+        }
+
+        public void run(Source source) throws DebugSupportException {
+            // TODO (mlvdv) fix to run properly in the current VM
+            try {
+                SLLanguage.run(source);
+            } catch (QuitException ex) {
+                throw ex;
+            } catch (Exception e) {
+                throw new DebugSupportException(e);
+            }
+        }
+
+        public Object evalInContext(Source source, Node node, MaterializedFrame mFrame) throws DebugSupportException {
+            throw new DebugSupportException("evalInContext not supported in this language");
+        }
+
+        public AdvancedInstrumentRootFactory createAdvancedInstrumentRootFactory(String expr, AdvancedInstrumentResultListener resultListener) throws DebugSupportException {
+            throw new DebugSupportException("createAdvancedInstrumentRootFactory not supported in this language");
+        }
+
     }
 
 }

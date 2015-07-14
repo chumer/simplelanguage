@@ -43,7 +43,7 @@ import com.oracle.truffle.sl.runtime.*;
 public abstract class SLPrintlnBuiltin extends SLBuiltinNode {
 
     public SLPrintlnBuiltin() {
-        super(new NullSourceSection("SL builtin", "println"));
+        super(SourceSection.createUnavailable("SL builtin", "println"));
     }
 
     @Specialization
@@ -53,7 +53,7 @@ public abstract class SLPrintlnBuiltin extends SLBuiltinNode {
     }
 
     @TruffleBoundary
-    private static void doPrint(PrintStream out, long value) {
+    private static void doPrint(PrintWriter out, long value) {
         out.println(value);
     }
 
@@ -64,7 +64,7 @@ public abstract class SLPrintlnBuiltin extends SLBuiltinNode {
     }
 
     @TruffleBoundary
-    private static void doPrint(PrintStream out, boolean value) {
+    private static void doPrint(PrintWriter out, boolean value) {
         out.println(value);
     }
 
@@ -75,7 +75,7 @@ public abstract class SLPrintlnBuiltin extends SLBuiltinNode {
     }
 
     @TruffleBoundary
-    private static void doPrint(PrintStream out, String value) {
+    private static void doPrint(PrintWriter out, String value) {
         out.println(value);
     }
 
@@ -86,7 +86,7 @@ public abstract class SLPrintlnBuiltin extends SLBuiltinNode {
     }
 
     @TruffleBoundary
-    private static void doPrint(PrintStream out, Object value) {
+    private static void doPrint(PrintWriter out, Object value) {
         out.println(value);
     }
 }

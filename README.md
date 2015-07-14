@@ -18,19 +18,14 @@ Fork this repository to begin your own Truffle language.
 
 ## Running With Graal
 
-Download one of:
-
-* http://lafo.ssw.uni-linz.ac.at/graalvm/openjdk-8-graalvm-b132-linux-x86_64-0.7.tar.gz
-* http://lafo.ssw.uni-linz.ac.at/graalvm/openjdk-8-graalvm-b132-macosx-x86_64-0.7.tar.gz
+Build GraalVM https://wiki.openjdk.java.net/display/Graal/Instructions.
 
 Then run:
 
-    JAVACMD=graalvm-jdk1.8.0/bin/java bin/sl HelloWorld.sl
+    JAVACMD=../basic-graal/jdk1.8.0_31/product/bin/java bin/sl HelloWorld.sl
 
-At the moment there is no Windows build of Graal, but you can still run
-SimpleLanguage in the interpreted mode on a standard JVM:
-
-    java -jar target/simplelanguage-complete-0.1-SNAPSHOT.jar HelloWorld.sl
+You may have to adjust the path `../basic-graal/jdk1.8.0_31/product/bin/java`
+for your system.
 
 ## Options
 
@@ -45,7 +40,10 @@ comments.
 
     mvn javadoc:javadoc
 
-Start with the `SLMain` class.
+Note that this may appear to fail with Java 8, but the files are still
+accessible at `target/site/apidocs/index.html`.
+
+Start with the `SLLanguage` class.
 
 You should also have access to the [Truffle documentation
 itself](http://lafo.ssw.uni-linz.ac.at/javadoc/graalvm/all/index.html).

@@ -39,7 +39,7 @@ import com.oracle.truffle.api.source.*;
 public abstract class SLStackTraceBuiltin extends SLBuiltinNode {
 
     public SLStackTraceBuiltin() {
-        super(new NullSourceSection("SL builtin", "stacktrace"));
+        super(SourceSection.createUnavailable("SL builtin", "stacktrace"));
     }
 
     @Specialization
@@ -49,23 +49,28 @@ public abstract class SLStackTraceBuiltin extends SLBuiltinNode {
 
     @TruffleBoundary
     private static String createStackTrace() {
-        StringBuilder str = new StringBuilder();
+        final StringBuilder str = new StringBuilder();
 
-        Truffle.getRuntime().iterateFrames(frameInstance -> {
-            dumpFrame(str, frameInstance.getCallTarget(), frameInstance.getFrame(FrameAccess.READ_ONLY, true));
-            return null;
+        Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<Integer>() {
+            @Override
+            public Integer visitFrame(FrameInstance frameInstance) {
+                CallTarget callTarget = frameInstance.getCallTarget();
+                Frame frame = frameInstance.getFrame(FrameAccess.READ_ONLY, true);
+                RootNode rn = ((RootCallTarget) callTarget).getRootNode();
+                if (rn.getClass().getName().contains("SLFunctionForeignAccess")) {
+                    return 1;
+                }
+                if (str.length() > 0) {
+                    str.append(System.getProperty("line.separator"));
+                }
+                str.append("Frame: ").append(rn.toString());
+                FrameDescriptor frameDescriptor = frame.getFrameDescriptor();
+                for (FrameSlot s : frameDescriptor.getSlots()) {
+                    str.append(", ").append(s.getIdentifier()).append("=").append(frame.getValue(s));
+                }
+                return null;
+            }
         });
         return str.toString();
-    }
-
-    private static void dumpFrame(StringBuilder str, CallTarget callTarget, Frame frame) {
-        if (str.length() > 0) {
-            str.append(System.getProperty("line.separator"));
-        }
-        str.append("Frame: ").append(((RootCallTarget) callTarget).getRootNode().toString());
-        FrameDescriptor frameDescriptor = frame.getFrameDescriptor();
-        for (FrameSlot s : frameDescriptor.getSlots()) {
-            str.append(", ").append(s.getIdentifier()).append("=").append(frame.getValue(s));
-        }
     }
 }

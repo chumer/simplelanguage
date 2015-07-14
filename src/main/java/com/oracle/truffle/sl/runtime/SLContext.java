@@ -30,7 +30,6 @@ import com.oracle.truffle.api.frame.*;
 import com.oracle.truffle.api.nodes.*;
 import com.oracle.truffle.api.object.*;
 import com.oracle.truffle.api.source.*;
-import com.oracle.truffle.sl.*;
 import com.oracle.truffle.sl.builtins.*;
 import com.oracle.truffle.sl.nodes.*;
 import com.oracle.truffle.sl.nodes.local.*;
@@ -50,22 +49,17 @@ public final class SLContext extends ExecutionContext {
     private static final Layout LAYOUT = Layout.createLayout();
 
     private final BufferedReader input;
-    private final PrintStream output;
+    private final PrintWriter output;
     private final SLFunctionRegistry functionRegistry;
     private final Shape emptyShape;
 
-    public SLContext(BufferedReader input, PrintStream output) {
+    public SLContext(BufferedReader input, PrintWriter output) {
         this.input = input;
         this.output = output;
         this.functionRegistry = new SLFunctionRegistry();
         installBuiltins();
 
         this.emptyShape = LAYOUT.createShape(new ObjectType());
-    }
-
-    @Override
-    public String getLanguageShortName() {
-        return "Simple";
     }
 
     /**
@@ -80,7 +74,7 @@ public final class SLContext extends ExecutionContext {
      * The default default, i.e., the output for the {@link SLPrintlnBuiltin}. To allow unit
      * testing, we do not use {@link System#out} directly.
      */
-    public PrintStream getOutput() {
+    public PrintWriter getOutput() {
         return output;
     }
 
@@ -147,22 +141,12 @@ public final class SLContext extends ExecutionContext {
     }
 
     /**
-     * This function will parse the given source code, parse the code using the {@link Parser}, and
-     * then execute the function named main. To use this method with instrumentation,
-     * setASTNodeProber must have been already called. There is currently no guard to check if this
-     * is the case. <br/>
-     * Due to the experimental nature of the instrumentation framework, the parse that happens in
-     * this method will remove any previously added instrumentation.
+     * Evaluate a source, causing any definitions to be registered (but not executed).
      *
-     * @param source The {@link Source} to execute.
+     * @param source The {@link Source} to parse.
      */
-    public void executeMain(Source source) {
+    public void evalSource(Source source) {
         Parser.parseSL(this, source);
-        SLFunction main = getFunctionRegistry().lookup("main");
-        if (main.getCallTarget() == null) {
-            throw new SLException("No function main() defined in SL source file.");
-        }
-        main.getCallTarget().call();
     }
 
     public DynamicObject createObject() {

@@ -22,8 +22,8 @@
  */
 package com.oracle.truffle.sl.builtins;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.*;
-import com.oracle.truffle.api.CompilerDirectives.*;
 import com.oracle.truffle.api.dsl.*;
 import com.oracle.truffle.api.frame.*;
 import com.oracle.truffle.api.frame.FrameInstance.FrameAccess;
@@ -37,7 +37,7 @@ import com.oracle.truffle.api.source.*;
 public abstract class SLHelloEqualsWorldBuiltin extends SLBuiltinNode {
 
     public SLHelloEqualsWorldBuiltin() {
-        super(new NullSourceSection("SL builtin", "helloEqualsWorld"));
+        super(SourceSection.createUnavailable("SL builtin", "helloEqualsWorld"));
     }
 
     @Specialization

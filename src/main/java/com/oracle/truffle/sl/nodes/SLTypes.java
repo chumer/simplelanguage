@@ -24,13 +24,14 @@ package com.oracle.truffle.sl.nodes;
 
 import java.math.*;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.*;
 import com.oracle.truffle.api.dsl.internal.*;
 import com.oracle.truffle.sl.*;
 import com.oracle.truffle.sl.runtime.*;
 
 /**
- * The type system of SL, as explained in {@link SLMain}. Based on the {@link TypeSystem}
+ * The type system of SL, as explained in {@link SLLanguage}. Based on the {@link TypeSystem}
  * annotation, the Truffle DSL generates the subclass {@link SLTypesGen} with type test and type
  * conversion methods for all types. In this class, we only cover types where the automatically
  * generated ones would not be sufficient.
@@ -69,6 +70,7 @@ public abstract class SLTypes {
      * {@link BigInteger} arithmetic for values that fit into a 64-bit primitive value.
      */
     @ImplicitCast
+    @TruffleBoundary
     public static BigInteger castBigInteger(long value) {
         return BigInteger.valueOf(value);
     }

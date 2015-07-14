@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 JAVACMD=${JAVACMD:=java}
-SIMPLELANGUAGE_JAR=${SIMPLELANGUAGE_JAR:=target/simplelanguage-complete-0.1-SNAPSHOT.jar}
+SL_JAR=${SL_JAR:=target/simplelanguage-complete-0.1-SNAPSHOT.jar}
+SL_MAIN=com.oracle.truffle.sl.SLLanguage
 
 PROGRAM_ARGS=""
 JAVA_ARGS=""
@@ -17,4 +18,4 @@ do
   esac
 done
 
-$JAVACMD $JAVA_ARGS -jar $SIMPLELANGUAGE_JAR $PROGRAM_ARGS
+$JAVACMD $JAVA_ARGS -Xbootclasspath/p:$SL_JAR $SL_MAIN $PROGRAM_ARGS

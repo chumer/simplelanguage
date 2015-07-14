@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,24 +20,20 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.truffle.sl.test.instrument;
+package com.oracle.truffle.sl.nodes.call;
 
-import org.junit.*;
-import org.junit.runner.*;
+public class SLUndefinedFunctionException extends RuntimeException {
 
-@RunWith(SLInstrumentTestRunner.class)
-@SLInstrumentTestSuite({"truffle/com.oracle.truffle.sl.test/tests_instrumentation", "tests_instrumentation", "src/test/sl/instrumentation"})
-public class SLSimpleInstrumentTestSuite {
+    private static final long serialVersionUID = 1L;
 
-    public static void main(String[] args) throws Exception {
-        SLInstrumentTestRunner.runInMain(SLSimpleInstrumentTestSuite.class, args);
+    private final String functionName;
+
+    public SLUndefinedFunctionException(String functionName) {
+        this.functionName = functionName;
     }
 
-    /*
-     * Our "mx unittest" command looks for methods that are annotated with @Test. By just defining
-     * an empty method, this class gets included and the test suite is properly executed.
-     */
-    @Test
-    public void unittest() {
+    public String getFunctionName() {
+        return functionName;
     }
+
 }
