@@ -2,7 +2,8 @@
 
 A simple language built using Truffle for the GraalVM.
 
-Fork this repository to begin your own Truffle language.
+This repository is licensed under the permissive UPL licence. Fork it to begin
+your own Truffle language.
 
 ## Compiling
 
